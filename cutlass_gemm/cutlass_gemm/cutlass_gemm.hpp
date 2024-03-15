@@ -37,13 +37,13 @@
 
 #include <cutlass/gemm/device/gemm.h>
 
-template<typename DataType> void cutlass_gemm_wrapper(int M, int N, int K, DataType const* ptrA, DataType const* ptrB, DataType* ptrC) {
+template<typename DataType, typename OutputType> void cutlass_gemm_wrapper(int M, int N, int K, DataType const* ptrA, DataType const* ptrB, OutputType* ptrC) {
   using Gemm = cutlass::gemm::device::Gemm<
     DataType,                     // ElementA
     cutlass::layout::RowMajor,    // LayoutA
     DataType,                     // ElementB
     cutlass::layout::RowMajor,    // LayoutB
-    DataType,                     // ElementOutput
+    OutputType,                     // ElementOutput
     cutlass::layout::RowMajor,    // LayoutOutput
     float                         // ElementAccumulator
   >;
@@ -86,7 +86,7 @@ template<typename DataType> void cutlass_gemm_wrapper(int M, int N, int K, DataT
 
 using namespace cute;
 
-template<class DataType> void cutlass_gemm_wrapper(int M, int N, int K, DataType const* ptrA, DataType const* ptrB, DataType* ptrC) {
+template<typename DataType, typename OutputType> void cutlass_gemm_wrapper(int M, int N, int K, DataType const* ptrA, DataType const* ptrB, OutputType* ptrC) {
 
 
   // A matrix configuration
@@ -99,7 +99,7 @@ template<class DataType> void cutlass_gemm_wrapper(int M, int N, int K, DataType
 
   // C/D matrix configuration
   using         LayoutC     = cutlass::layout::RowMajor;                   // Layout type for C and D matrix operands
-  constexpr int AlignmentC  = 128 / cutlass::sizeof_bits<DataType>::value;
+  constexpr int AlignmentC  = 128 / cutlass::sizeof_bits<OutputType>::value;
 
   // Core kernel configurations
   using ElementAccumulator  = float;                                          // Element type for internal accumulation
@@ -125,8 +125,8 @@ template<class DataType> void cutlass_gemm_wrapper(int M, int N, int K, DataType
     TilesShape, ClusterShape,
     cutlass::epilogue::collective::EpilogueTileAuto,
     ElementAccumulator, ElementAccumulator,
-    DataType, LayoutC, AlignmentC,
-    DataType, LayoutC, AlignmentC,
+    OutputType, LayoutC, AlignmentC,
+    OutputType, LayoutC, AlignmentC,
     cutlass::epilogue::collective::EpilogueScheduleAuto
   >::CollectiveOp;
 
