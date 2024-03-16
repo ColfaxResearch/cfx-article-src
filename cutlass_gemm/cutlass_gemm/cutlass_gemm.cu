@@ -36,13 +36,13 @@ template<typename DataType> void cutlass_gemm_find_output_type(torch::Tensor A, 
     throw std::invalid_argument("Unsupported precision type");
 }
 
-// This function is bound to "cutlass_gemm.mm". Takes torch::Tensors as inputs
+// This function is bound to "cutlass_gemm.mm". 
 torch::Tensor cutlass_gemm(torch::Tensor A,  // A matrix (m x k)
                            torch::Tensor B,  // B matrix (k x n)
                            c10::optional<torch::Tensor> out) {   // optional out matrix (m x n)
 
 
-  // Handling the optional C matrix
+  // Handling the optional C matrix.
   torch::Tensor C;
   if(out.has_value()) {  // Output tensor was provided. So we will use it.
     C = out.value();
@@ -50,7 +50,7 @@ torch::Tensor cutlass_gemm(torch::Tensor A,  // A matrix (m x k)
     const int M = A.sizes()[0];
     const int N = B.sizes()[1];
 
-    // We will allocate the matrix on GPU and set the datatype to be the same as the input
+    // We will allocate the matrix on GPU and set the datatype to be the same as the input.
     auto c_options = torch::TensorOptions().device(torch::kCUDA).dtype(A.dtype());
     C = torch::empty({M, N}, c_options);
   }
@@ -66,15 +66,15 @@ torch::Tensor cutlass_gemm(torch::Tensor A,  // A matrix (m x k)
   torch::Tensor _B = B.contiguous();
   torch::Tensor _C = C.contiguous();
 
-  // Select the CUTLASS precision typt to use based on Torch input data type.
-  if(A.dtype() == torch::kFloat16)
-    cutlass_gemm_find_output_type<cutlass::half_t>(A, B, _C);
-  else if(A.dtype() == torch::kFloat32)
-    cutlass_gemm_find_output_type<float>(A, B, _C);
+  // Select the CUTLASS precision type to use based on Torch input data type.
+  if(_A.dtype() == torch::kFloat16)
+    cutlass_gemm_find_output_type<cutlass::half_t>(_A, _B, _C);
+  else if(_A.dtype() == torch::kFloat32)
+    cutlass_gemm_find_output_type<float>(_A, _B, _C);
   else
     throw std::invalid_argument("Unsupported precision type");
 
-  // If C was not contiguous, C != _C so copy hthe result back into C
+  // If C was not contiguous, C != _C so copy the result back into C
   if(!C.is_contiguous())
     C.copy_(_C);
 
