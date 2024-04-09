@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <chrono>
+
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
@@ -17,6 +19,8 @@
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/helper_cuda.hpp"
 #include "cutlass/util/print_error.hpp"
+
+#include "cutlass/detail/layout.hpp"
 
 #include "shared_storage.h"
 
@@ -49,7 +53,6 @@ __global__ static void __launch_bounds__(256, 1)
   Tensor tDgD = local_partition(gD, tD, threadIdx.x);
   Tensor tDsD = local_partition(sD, tD, threadIdx.x);
 
-  __syncthreads();
   cute::copy(tSgS, tSsS); // LDGSTS
 
   cp_async_fence();
@@ -131,15 +134,25 @@ int transpose_host_kernel_smem(int M, int N) {
       size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
   dim3 blockDim(size(threadLayoutS)); // 256 threads
 
-  transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
-      tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
-      smemLayoutD_swizzle, threadLayoutD);
+  int iterations = 10;
 
-  cudaError result = cudaDeviceSynchronize();
-  if (result != cudaSuccess) {
-    std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
+  for (int i = 0; i < iterations; i++) {
+    auto t1 = std::chrono::high_resolution_clock::now();
+    transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
+        tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
+        smemLayoutD_swizzle, threadLayoutD);
+    cudaError result = cudaDeviceSynchronize();
+    auto t2 = std::chrono::high_resolution_clock::now();
+    if (result != cudaSuccess) {
+      std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
+                << std::endl;
+      return -1;
+    }
+    std::chrono::duration<double, std::milli> tDiff = t2 - t1;
+    double time_ms = tDiff.count();
+    std::cout << "Trial " << i << " Completed in " << time_ms << "ms ("
+              << 2e-6 * M * N * sizeof(Element) / time_ms << " GB/s)"
               << std::endl;
-    return -1;
   }
 
   //
