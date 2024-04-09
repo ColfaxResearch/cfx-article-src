@@ -13,7 +13,7 @@ int main(int argc, char const **argv) {
 
   std::cout << "(M, N): " << M << ", " << N << std::endl;
 
-  transpose_host_kernel_smem(M, N);  
+  transpose_host_kernel_smem(M, N);
 
   return 0;
 }

@@ -8,10 +8,10 @@
 #include <thrust/host_vector.h>
 
 #include "cutlass/numeric_types.h"
+#include <cute/arch/cluster_sm90.hpp>
 #include <cute/tensor.hpp>
 #include <cutlass/cluster_launch.hpp>
 #include <cutlass/cutlass.h>
-#include <cute/arch/cluster_sm90.hpp>
 
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/command_line.h"
@@ -20,31 +20,37 @@
 
 #include "shared_storage.h"
 
-template <class TensorS, class TensorD, class SmemLayoutS, class ThreadLayoutS, class SmemLayoutD, class ThreadLayoutD>
+template <class TensorS, class TensorD, class SmemLayoutS, class ThreadLayoutS,
+          class SmemLayoutD, class ThreadLayoutD>
 __global__ static void __launch_bounds__(256, 1)
-transposeKernelSmem(TensorS const S, TensorD const D, SmemLayoutS const smemLayoutS, ThreadLayoutS const tS, SmemLayoutD const smemLayoutD, ThreadLayoutD const tD) {
+    transposeKernelSmem(TensorS const S, TensorD const D,
+                        SmemLayoutS const smemLayoutS, ThreadLayoutS const tS,
+                        SmemLayoutD const smemLayoutD, ThreadLayoutD const tD) {
   using namespace cute;
-  using Element = typename TensorS::value_type;  
+  using Element = typename TensorS::value_type;
 
   // Use Shared Storage structure to allocate aligned SMEM addresses.
   extern __shared__ char shared_memory[];
   using SharedStorage = SharedStorageTranspose<Element, SmemLayoutD>;
-  SharedStorage &shared_storage = *reinterpret_cast<SharedStorage *>(shared_memory);
+  SharedStorage &shared_storage =
+      *reinterpret_cast<SharedStorage *>(shared_memory);
 
   // two different views of smem
-  Tensor sS = make_tensor(make_smem_ptr(shared_storage.smem.data()), smemLayoutS);  // (bM, bN)
-  Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()), smemLayoutD);  // (bN, bM)
+  Tensor sS = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+                          smemLayoutS); // (bM, bN)
+  Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+                          smemLayoutD); // (bN, bM)
 
-  Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y);  // (bM, bN)        
-  Tensor gD = D(make_coord(_, _), blockIdx.y, blockIdx.x);  // (bN, bM)        
+  Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y); // (bM, bN)
+  Tensor gD = D(make_coord(_, _), blockIdx.y, blockIdx.x); // (bN, bM)
 
-  Tensor tSgS = local_partition(gS, tS, threadIdx.x);  // (ThrValM, ThrValN)
-  Tensor tSsS = local_partition(sS, tS, threadIdx.x);  // (ThrValM, ThrValN)
+  Tensor tSgS = local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
+  Tensor tSsS = local_partition(sS, tS, threadIdx.x); // (ThrValM, ThrValN)
   Tensor tDgD = local_partition(gD, tD, threadIdx.x);
   Tensor tDsD = local_partition(sD, tD, threadIdx.x);
 
   __syncthreads();
-  cute::copy(tSgS, tSsS); //LDGSTS
+  cute::copy(tSgS, tSsS); // LDGSTS
 
   cp_async_fence();
   cp_async_wait<0>();
@@ -54,94 +60,106 @@ transposeKernelSmem(TensorS const S, TensorD const D, SmemLayoutS const smemLayo
 }
 
 int transpose_host_kernel_smem(int M, int N) {
-    printf("NO tma, smem passthrough, not vectorized, swizzled\n");
+  printf("NO tma, smem passthrough, not vectorized, swizzled\n");
 
-    using Element = float;
-    using namespace cute;
+  using Element = float;
+  using namespace cute;
 
-    auto tensor_shape = make_shape(M, N);
-    auto tensor_shape_trans = make_shape(N, M);
+  auto tensor_shape = make_shape(M, N);
+  auto tensor_shape_trans = make_shape(N, M);
 
-    //Allocate and initialize
-    thrust::host_vector<Element> h_S(size(tensor_shape)); // (M, N)
-    thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
+  // Allocate and initialize
+  thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
+  thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
 
-    for (size_t i = 0; i < h_S.size(); ++i) {
-        h_S[i] = static_cast<Element>(i);
-        h_D[i] = Element{};
-    }
+  for (size_t i = 0; i < h_S.size(); ++i) {
+    h_S[i] = static_cast<Element>(i);
+    h_D[i] = Element{};
+  }
 
-    thrust::device_vector<Element> d_S = h_S;
-    thrust::device_vector<Element> d_D = h_D;
+  thrust::device_vector<Element> d_S = h_S;
+  thrust::device_vector<Element> d_D = h_D;
 
-    //
-    // Make tensors
-    //
+  //
+  // Make tensors
+  //
 
-    // Could also have ColMajor.
-    auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
-    auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
+  // Could also have ColMajor.
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
 
-    Tensor tensor_S = make_tensor(make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
-    Tensor tensor_D = make_tensor(make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
+  Tensor tensor_S = make_tensor(
+      make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
+  Tensor tensor_D = make_tensor(
+      make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
 
-    //
-    // Tile tensors
-    //
-    
-    using bM = Int<32>;
-    using bN = Int<32>;
+  //
+  // Tile tensors
+  //
 
-    auto block_shape = make_shape(bM{}, bN{}); // (bM, bN)
-    auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
+  using bM = Int<32>;
+  using bN = Int<32>;
 
-    Tensor tiled_tensor_S = tiled_divide(tensor_S, block_shape);      // ((bM, bN), m', n')
-    Tensor tiled_tensor_D = tiled_divide(tensor_D, block_shape_trans);      // ((bN, bM), n', m')
-    
-    auto tileShapeS = make_layout(block_shape, GenRowMajor{});
-    auto tileShapeD = make_layout(block_shape_trans, GenRowMajor{});                    
-    
-    auto smemLayoutS_swizzle = composition(Swizzle<5, 0, 5>{}, tileShapeS);
-    auto smemLayoutD_swizzle = composition(smemLayoutS_swizzle, tileShapeD);
+  auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
+  auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
 
-    auto threadLayoutS = make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
-    auto threadLayoutD = make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
+  Tensor tiled_tensor_S =
+      tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')
+  Tensor tiled_tensor_D =
+      tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
 
-    size_t smem_size = int(sizeof(SharedStorageTranspose<Element, decltype(smemLayoutS_swizzle)>));
+  auto tileShapeS = make_layout(block_shape, GenRowMajor{});
+  auto tileShapeD = make_layout(block_shape_trans, GenRowMajor{});
 
-    //
-    // Determine grid and block dimensions
-    //    
+  auto smemLayoutS_swizzle = composition(Swizzle<5, 0, 5>{}, tileShapeS);
+  auto smemLayoutD_swizzle = composition(smemLayoutS_swizzle, tileShapeD);
 
-    dim3 gridDim(size<1>(tiled_tensor_S), size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
-    dim3 blockDim(size(threadLayoutS)); //256 threads
+  auto threadLayoutS =
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
+  auto threadLayoutD =
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
 
-    transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS, smemLayoutD_swizzle, threadLayoutD);
-    
-    cudaError result = cudaDeviceSynchronize();
-    if (result != cudaSuccess) {
-        std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result) << std::endl;
-        return -1;
-    }
+  size_t smem_size = int(
+      sizeof(SharedStorageTranspose<Element, decltype(smemLayoutS_swizzle)>));
 
-    //
-    // Verify
-    //
+  //
+  // Determine grid and block dimensions
+  //
 
-    h_D = d_D;
-    
-    int good = 0, bad = 0;
+  dim3 gridDim(
+      size<1>(tiled_tensor_S),
+      size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
+  dim3 blockDim(size(threadLayoutS)); // 256 threads
 
-    auto transposeFunction = make_layout(tensor_shape, GenRowMajor{});
+  transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
+      tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
+      smemLayoutD_swizzle, threadLayoutD);
 
-    for (size_t i = 0; i < h_D.size(); ++i) {        
-        if (h_D[i] == h_S[transposeFunction(i)])            
-            good++;    
-        else
-            bad++;
-    }
+  cudaError result = cudaDeviceSynchronize();
+  if (result != cudaSuccess) {
+    std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
+              << std::endl;
+    return -1;
+  }
 
-    std::cout << "Success " << good << ", Fail " << bad << std::endl;
+  //
+  // Verify
+  //
 
-    return 0;
+  h_D = d_D;
+
+  int good = 0, bad = 0;
+
+  auto transposeFunction = make_layout(tensor_shape, GenRowMajor{});
+
+  for (size_t i = 0; i < h_D.size(); ++i) {
+    if (h_D[i] == h_S[transposeFunction(i)])
+      good++;
+    else
+      bad++;
+  }
+
+  std::cout << "Success " << good << ", Fail " << bad << std::endl;
+
+  return 0;
 }
