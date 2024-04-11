@@ -7,12 +7,12 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include <cutlass/numeric_types.h>
-#include <cute/tensor.hpp>
 #include <cute/arch/cluster_sm90.hpp>
+#include <cute/tensor.hpp>
+#include <cutlass/arch/barrier.h>
 #include <cutlass/cluster_launch.hpp>
 #include <cutlass/cutlass.h>
-#include <cutlass/arch/barrier.h>
+#include <cutlass/numeric_types.h>
 
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/command_line.h"
@@ -26,11 +26,16 @@
 
 using namespace cute;
 
-template <class TensorS, class SmemLayout, class TiledCopyS, class TiledCopyD, 
-  class GmemLayoutD, class TileShapeD, class ThreadLayoutM, class SmemLayoutM>
+template <class TensorS, class SmemLayout, class TiledCopyS, class TiledCopyD,
+          class GmemLayoutD, class TileShapeD, class ThreadLayoutM,
+          class SmemLayoutM>
 __global__ static void __launch_bounds__(256)
-transposeKernelTMA(TensorS const S, SmemLayout const smemLayout, TiledCopyS const tiled_copy_S,
-    CUTE_GRID_CONSTANT TiledCopyD const tmaStoreD, GmemLayoutD const gmemLayoutD, TileShapeD const tileShapeD, ThreadLayoutM const tM, SmemLayoutM const smemLayoutM) {
+    transposeKernelTMA(TensorS const S, SmemLayout const smemLayout,
+                       TiledCopyS const tiled_copy_S,
+                       CUTE_GRID_CONSTANT TiledCopyD const tmaStoreD,
+                       GmemLayoutD const gmemLayoutD,
+                       TileShapeD const tileShapeD, ThreadLayoutM const tM,
+                       SmemLayoutM const smemLayoutM) {
   using namespace cute;
   using Element = typename TensorS::value_type;
 
@@ -41,32 +46,34 @@ transposeKernelTMA(TensorS const S, SmemLayout const smemLayout, TiledCopyS cons
   // Use Shared Storage structure to allocate aligned SMEM addresses.
   extern __shared__ char shared_memory[];
   using SharedStorage = SharedStorageTranspose<Element, SmemLayout>;
-  SharedStorage &shared_storage = *reinterpret_cast<SharedStorage *>(shared_memory);  
-  Tensor sM = make_tensor(make_smem_ptr(shared_storage.smem.data()), smemLayoutM); 
+  SharedStorage &shared_storage =
+      *reinterpret_cast<SharedStorage *>(shared_memory);
+  Tensor sM =
+      make_tensor(make_smem_ptr(shared_storage.smem.data()), smemLayoutM);
 
-  Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y);  // (bM, bN)      
-  auto thr_copy_S = tiled_copy_S.get_thread_slice(threadIdx.x);    
+  Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y); // (bM, bN)
+  auto thr_copy_S = tiled_copy_S.get_thread_slice(threadIdx.x);
 
-  Tensor tSgS = thr_copy_S.partition_S(gS); // (CopyOp, CopyM, CopyN)    
-  Tensor tSrS = make_fragment_like(tSgS); // (CopyOp, CopyM, CopyN)
-  Tensor tMsM = local_partition(sM, tM, threadIdx.x);  
+  Tensor tSgS = thr_copy_S.partition_S(gS); // (CopyOp, CopyM, CopyN)
+  Tensor tSrS = make_fragment_like(tSgS);   // (CopyOp, CopyM, CopyN)
+  Tensor tMsM = local_partition(sM, tM, threadIdx.x);
 
   // Copy from GMEM to RMEM to SMEM
   copy(tiled_copy_S, tSgS, tSrS);
   copy(tSrS, tMsM);
 
-  
   auto synchronize = [&]() {
     cutlass::arch::NamedBarrier::sync(size(ThreadLayoutM{}), 0);
   };
-cutlass::arch::fence_view_async_shared(); 
+  cutlass::arch::fence_view_async_shared();
   synchronize();
-  
+
   // Issue the TMA store.
-  Tensor mD = tmaStoreD.get_tma_tensor(shape(gmemLayoutD));  
+  Tensor mD = tmaStoreD.get_tma_tensor(shape(gmemLayoutD));
   auto blkCoordD = make_coord(blockIdx.y, blockIdx.x);
   Tensor gD = local_tile(mD, tileShapeD, blkCoordD);
-  Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()), smemLayout);  // (bN, bM)
+  Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+                          smemLayout); // (bN, bM)
 
   auto cta_tmaD = tmaStoreD.get_slice(0);
 
@@ -82,134 +89,135 @@ cutlass::arch::fence_view_async_shared();
     copy(tmaStoreD, tDsD, tDgD);
   }
   // Wait for TMA store to complete.
-  tma_store_wait<0>(); 
-
+  tma_store_wait<0>();
 }
 
 int transpose_host_kernel_tma(int M, int N) {
-    printf("Vectorized load into registers, write out via TMA Store\n");
-    printf("Profiler reports uncoalesced smem accesses\n");
+  printf("Vectorized load into registers, write out via TMA Store\n");
+  printf("Profiler reports uncoalesced smem accesses\n");
 
-    using Element = float;
-    using namespace cute;
+  using Element = float;
+  using namespace cute;
 
-    auto tensor_shape = make_shape(M, N);
-    auto tensor_shape_trans = make_shape(N, M);
+  auto tensor_shape = make_shape(M, N);
+  auto tensor_shape_trans = make_shape(N, M);
 
-    //Allocate and initialize
-    thrust::host_vector<Element> h_S(size(tensor_shape)); // (M, N)
-    thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
+  // Allocate and initialize
+  thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
+  thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
 
-    for (size_t i = 0; i < h_S.size(); ++i) {
-        h_S[i] = static_cast<Element>(i);
-        h_D[i] = Element{};
-    }
+  for (size_t i = 0; i < h_S.size(); ++i) {
+    h_S[i] = static_cast<Element>(i);
+    h_D[i] = Element{};
+  }
 
-    thrust::device_vector<Element> d_S = h_S;
-    thrust::device_vector<Element> d_D = h_D;
+  thrust::device_vector<Element> d_S = h_S;
+  thrust::device_vector<Element> d_D = h_D;
 
-    //
-    // Make tensors
-    //
+  //
+  // Make tensors
+  //
 
-    // Could also have ColMajor.
-    auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
-    auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
+  // Could also have ColMajor.
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
 
-    Tensor tensor_S = make_tensor(make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
-    Tensor tensor_D = make_tensor(make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
+  Tensor tensor_S = make_tensor(
+      make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
+  Tensor tensor_D = make_tensor(
+      make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
 
-    //
-    // Tile tensors
-    //
-    
-    using bM = Int<32>;
-    using bN = Int<32>;    
+  //
+  // Tile tensors
+  //
 
-    auto block_shape = make_shape(bM{}, bN{}); // (bM, bN)
-    auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
+  using bM = Int<32>;
+  using bN = Int<32>;
 
-    Tensor tiled_tensor_S = tiled_divide(tensor_S, block_shape);      // ((bM, bN), m', n')
-    Tensor tiled_tensor_D = tiled_divide(tensor_D, block_shape_trans);      // ((bN, bM), n', m')
-    
-    auto threadLayoutS = make_layout(make_shape(Int<32>{}, Int<8>{}), GenRowMajor{});
-    auto vecLayoutS = make_layout(make_shape(Int<1>{}, Int<4>{}));
-    using AccessTypeS = cutlass::AlignedArray<Element, size(vecLayoutS)>;
-    using AtomS = Copy_Atom<UniversalCopy<AccessTypeS>, Element>;
-    auto tiled_copy_S = make_tiled_copy(AtomS{}, threadLayoutS, vecLayoutS);
+  auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
+  auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
 
-    auto tileShapeD = block_shape_trans;
-    auto smemLayoutD =
+  Tensor tiled_tensor_S =
+      tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')
+  Tensor tiled_tensor_D =
+      tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
+
+  auto threadLayoutS =
+      make_layout(make_shape(Int<32>{}, Int<8>{}), GenRowMajor{});
+  auto vecLayoutS = make_layout(make_shape(Int<1>{}, Int<4>{}));
+  using AccessTypeS = cutlass::AlignedArray<Element, size(vecLayoutS)>;
+  using AtomS = Copy_Atom<UniversalCopy<AccessTypeS>, Element>;
+  auto tiled_copy_S = make_tiled_copy(AtomS{}, threadLayoutS, vecLayoutS);
+
+  auto tileShapeD = block_shape_trans;
+  auto smemLayoutD =
       tile_to_shape(cfx::getSmemLayoutK<Element, bM{}>(),
-                    make_shape(shape<0>(tileShapeD), shape<1>(tileShapeD)));    
-    //TMA only supports certain swizzles                
-    //https://github.com/NVIDIA/cutlass/blob/main/include/cute/atom/copy_traits_sm90_tma_swizzle.hpp
-    auto tmaD =
-      make_tma_copy(SM90_TMA_STORE{}, tensor_D, smemLayoutD, tileShapeD, Int<1>{});   
+                    make_shape(shape<0>(tileShapeD), shape<1>(tileShapeD)));
+  // TMA only supports certain swizzles
+  // https://github.com/NVIDIA/cutlass/blob/main/include/cute/atom/copy_traits_sm90_tma_swizzle.hpp
+  auto tmaD = make_tma_copy(SM90_TMA_STORE{}, tensor_D, smemLayoutD, tileShapeD,
+                            Int<1>{});
 
-    auto tileShapeM = make_shape(Int<4>{}, Int<8>{}, Int<32>{});
-    auto smemLayoutM = composition(smemLayoutD, make_layout(tileShapeM));    
-    auto threadLayoutM = make_layout(make_shape(Int<1>{},Int<8>{}, Int<32>{}), make_stride(Int<1>{}, Int<1>{}, Int<8>{}));
+  auto tileShapeM = make_shape(Int<4>{}, Int<8>{}, Int<32>{});
+  auto smemLayoutM = composition(smemLayoutD, make_layout(tileShapeM));
+  auto threadLayoutM = make_layout(make_shape(Int<1>{}, Int<8>{}, Int<32>{}),
+                                   make_stride(Int<1>{}, Int<1>{}, Int<8>{}));
 
-    size_t smem_size = int(sizeof(SharedStorageTranspose<Element, decltype(smemLayoutD)>));
+  size_t smem_size =
+      int(sizeof(SharedStorageTranspose<Element, decltype(smemLayoutD)>));
 
-    //
-    // Determine grid and block dimensions
-    //
+  //
+  // Determine grid and block dimensions
+  //
 
-    dim3 gridDim(size<1>(tiled_tensor_S), size<2>(tiled_tensor_S));   // Grid shape corresponds to modes m' and n'
-    dim3 blockDim(size(threadLayoutS));
+  dim3 gridDim(
+      size<1>(tiled_tensor_S),
+      size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
+  dim3 blockDim(size(threadLayoutS));
 
-    transposeKernelTMA<<<gridDim, blockDim, smem_size>>>(tiled_tensor_S, smemLayoutD, tiled_copy_S, tmaD,
-        gmemLayoutD, tileShapeD, threadLayoutM, smemLayoutM);
+  transposeKernelTMA<<<gridDim, blockDim, smem_size>>>(
+      tiled_tensor_S, smemLayoutD, tiled_copy_S, tmaD, gmemLayoutD, tileShapeD,
+      threadLayoutM, smemLayoutM);
 
-    int iterations = 10;
+  int iterations = 10;
 
-    for (int i = 0; i < iterations; i++) {
-        auto t1 = std::chrono::high_resolution_clock::now();
-        transposeKernelTMA<<<gridDim, blockDim, smem_size>>>(tiled_tensor_S, smemLayoutD, tiled_copy_S, tmaD,
-            gmemLayoutD, tileShapeD, threadLayoutM, smemLayoutM);
-        cudaError result = cudaDeviceSynchronize();
-        auto t2 = std::chrono::high_resolution_clock::now();
-        if (result != cudaSuccess) {
-        std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
-                    << std::endl;
-        return -1;
-        }
-        std::chrono::duration<double, std::milli> tDiff = t2 - t1;
-        double time_ms = tDiff.count();
-        std::cout << "Trial " << i << " Completed in " << time_ms << "ms ("
-                << 2e-6 * M * N * sizeof(Element) / time_ms << " GB/s)"
-                << std::endl;
-    }
-    
+  for (int i = 0; i < iterations; i++) {
+    auto t1 = std::chrono::high_resolution_clock::now();
+    transposeKernelTMA<<<gridDim, blockDim, smem_size>>>(
+        tiled_tensor_S, smemLayoutD, tiled_copy_S, tmaD, gmemLayoutD,
+        tileShapeD, threadLayoutM, smemLayoutM);
     cudaError result = cudaDeviceSynchronize();
+    auto t2 = std::chrono::high_resolution_clock::now();
     if (result != cudaSuccess) {
-        std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result) << std::endl;
-        return -1;
+      std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
+                << std::endl;
+      return -1;
     }
+    std::chrono::duration<double, std::milli> tDiff = t2 - t1;
+    double time_ms = tDiff.count();
+    std::cout << "Trial " << i << " Completed in " << time_ms << "ms ("
+              << 2e-6 * M * N * sizeof(Element) / time_ms << " GB/s)"
+              << std::endl;
+  }
 
-    //
-    // Verify
-    //
+  //
+  // Verify
+  //
 
-    h_D = d_D;
-    
-    int good = 0, bad = 0;
+  h_D = d_D;
 
-    auto transposeFunction = make_layout(tensor_shape, GenRowMajor{});
+  int good = 0, bad = 0;
 
-    for (size_t i = 0; i < h_D.size(); ++i) {
-        if (h_D[i] == h_S[transposeFunction(i)])
-            good++;        
-        else
-            bad++;        
-    }
+  auto transposeFunction = make_layout(tensor_shape, GenRowMajor{});
 
-    std::cout << "Success " << good << ", Fail " << bad << std::endl;
+  for (size_t i = 0; i < h_D.size(); ++i) {
+    if (h_D[i] == h_S[transposeFunction(i)])
+      good++;
+    else
+      bad++;
+  }
 
-    return 0;
+  std::cout << "Success " << good << ", Fail " << bad << std::endl;
+
+  return 0;
 }
-
-
-
