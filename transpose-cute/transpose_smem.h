@@ -62,8 +62,11 @@ __global__ static void __launch_bounds__(256, 1)
   cute::copy(tDsD, tDgD);
 }
 
-int transpose_host_kernel_smem(int M, int N) {
-  printf("NO tma, smem passthrough, not vectorized, swizzled\n");
+template <bool isSwizzled = true> int transpose_host_kernel_smem(int M, int N) {
+  if constexpr (isSwizzled)
+    printf("NO tma, smem passthrough, not vectorized, swizzled\n");
+  else
+    printf("NO tma, smem passthrough, not vectorized, not swizzled\n");
 
   using Element = float;
   using namespace cute;
@@ -112,6 +115,8 @@ int transpose_host_kernel_smem(int M, int N) {
   auto tileShapeS = make_layout(block_shape, LayoutRight{});
   auto tileShapeD = make_layout(block_shape_trans, LayoutRight{});
 
+  auto smemLayoutS = tileShapeS;
+  auto smemLayoutD = composition(smemLayoutS, tileShapeD);
   auto smemLayoutS_swizzle = composition(Swizzle<5, 0, 5>{}, tileShapeS);
   auto smemLayoutD_swizzle = composition(smemLayoutS_swizzle, tileShapeD);
 
@@ -136,9 +141,15 @@ int transpose_host_kernel_smem(int M, int N) {
 
   for (int i = 0; i < iterations; i++) {
     auto t1 = std::chrono::high_resolution_clock::now();
-    transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
-        tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
-        smemLayoutD_swizzle, threadLayoutD);
+    if constexpr (isSwizzled) {
+      transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
+          tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
+          smemLayoutD_swizzle, threadLayoutD);
+    } else {
+      transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
+          tiled_tensor_S, tiled_tensor_D, smemLayoutS, threadLayoutS,
+          smemLayoutD, threadLayoutD);
+    }
     cudaError result = cudaDeviceSynchronize();
     auto t2 = std::chrono::high_resolution_clock::now();
     if (result != cudaSuccess) {

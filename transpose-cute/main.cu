@@ -17,8 +17,8 @@ int main(int argc, char const **argv) {
   std::cout << "(M, N): " << M << ", " << N << std::endl;
 
   transpose_host_kernel_naive(M, N);
-  transpose_host_kernel_smem_bank_conflict(M, N);
-  transpose_host_kernel_smem(M, N);
+  transpose_host_kernel_smem<false>(M, N); // not swizzled
+  transpose_host_kernel_smem<true>(M, N);  // swizzled
   transpose_host_kernel_tma(M, N);
 
   return 0;
