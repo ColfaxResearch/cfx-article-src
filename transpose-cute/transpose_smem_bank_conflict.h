@@ -28,8 +28,9 @@ template <class TensorS, class TensorD, class SmemLayout, class ThreadLayoutS,
           class SmemLayoutT, class ThreadLayoutD>
 __global__ static void __launch_bounds__(256, 1)
     transposeKernelSmemBC(TensorS const S, TensorD const D,
-                        SmemLayout  const smemLayout,  ThreadLayoutS const tS,
-                        SmemLayoutT const smemLayoutT, ThreadLayoutD const tD) {
+                          SmemLayout const smemLayout, ThreadLayoutS const tS,
+                          SmemLayoutT const smemLayoutT,
+                          ThreadLayoutD const tD) {
   using namespace cute;
   using Element = typename TensorS::value_type;
 
@@ -41,7 +42,7 @@ __global__ static void __launch_bounds__(256, 1)
 
   // two different views of smem
   Tensor sS = make_tensor(make_smem_ptr(shared_storage.smem.data()),
-                          smemLayout);  // (bM, bN)
+                          smemLayout); // (bM, bN)
   Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()),
                           smemLayoutT); // (bN, bM)
 
@@ -75,10 +76,8 @@ int transpose_host_kernel_smem_bank_conflict(int M, int N) {
   thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
   thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
 
-  for (size_t i = 0; i < h_S.size(); ++i) {
+  for (size_t i = 0; i < h_S.size(); ++i)
     h_S[i] = static_cast<Element>(i);
-    h_D[i] = Element{};
-  }
 
   thrust::device_vector<Element> d_S = h_S;
   thrust::device_vector<Element> d_D = h_D;
@@ -88,8 +87,8 @@ int transpose_host_kernel_smem_bank_conflict(int M, int N) {
   //
 
   // Could also have ColMajor.
-  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
+  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
 
   Tensor tensor_S = make_tensor(
       make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
@@ -111,16 +110,16 @@ int transpose_host_kernel_smem_bank_conflict(int M, int N) {
   Tensor tiled_tensor_D =
       tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
 
-  auto smemLayout = make_layout(block_shape, GenRowMajor{});
+  auto smemLayout = make_layout(block_shape, LayoutRight{});
   auto smemLayoutT = make_layout(block_shape, GenColMajor{});
 
   auto threadLayoutS =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
   auto threadLayoutD =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
 
-  size_t smem_size = int(
-      sizeof(SharedStorageTranspose<Element, decltype(smemLayout)>));
+  size_t smem_size =
+      int(sizeof(SharedStorageTranspose<Element, decltype(smemLayout)>));
 
   //
   // Determine grid and block dimensions
@@ -136,8 +135,8 @@ int transpose_host_kernel_smem_bank_conflict(int M, int N) {
   for (int i = 0; i < iterations; i++) {
     auto t1 = std::chrono::high_resolution_clock::now();
     transposeKernelSmemBC<<<gridDim, blockDim, smem_size>>>(
-        tiled_tensor_S, tiled_tensor_D, smemLayout, threadLayoutS,
-        smemLayoutT, threadLayoutD);
+        tiled_tensor_S, tiled_tensor_D, smemLayout, threadLayoutS, smemLayoutT,
+        threadLayoutD);
     cudaError result = cudaDeviceSynchronize();
     auto t2 = std::chrono::high_resolution_clock::now();
     if (result != cudaSuccess) {
@@ -160,7 +159,7 @@ int transpose_host_kernel_smem_bank_conflict(int M, int N) {
 
   int good = 0, bad = 0;
 
-  auto transposeFunction = make_layout(tensor_shape, GenRowMajor{});
+  auto transposeFunction = make_layout(tensor_shape, LayoutRight{});
 
   for (size_t i = 0; i < h_D.size(); ++i) {
     if (h_D[i] == h_S[transposeFunction(i)])

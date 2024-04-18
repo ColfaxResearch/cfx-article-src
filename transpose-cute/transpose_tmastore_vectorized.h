@@ -106,10 +106,8 @@ int transpose_host_kernel_tma(int M, int N) {
   thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
   thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
 
-  for (size_t i = 0; i < h_S.size(); ++i) {
+  for (size_t i = 0; i < h_S.size(); ++i)
     h_S[i] = static_cast<Element>(i);
-    h_D[i] = Element{};
-  }
 
   thrust::device_vector<Element> d_S = h_S;
   thrust::device_vector<Element> d_D = h_D;
@@ -119,8 +117,8 @@ int transpose_host_kernel_tma(int M, int N) {
   //
 
   // Could also have ColMajor.
-  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
+  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
 
   Tensor tensor_S = make_tensor(
       make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
@@ -143,7 +141,7 @@ int transpose_host_kernel_tma(int M, int N) {
       tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
 
   auto threadLayoutS =
-      make_layout(make_shape(Int<32>{}, Int<8>{}), GenRowMajor{});
+      make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});
   auto vecLayoutS = make_layout(make_shape(Int<1>{}, Int<4>{}));
   using AccessTypeS = cutlass::AlignedArray<Element, size(vecLayoutS)>;
   using AtomS = Copy_Atom<UniversalCopy<AccessTypeS>, Element>;
@@ -208,7 +206,7 @@ int transpose_host_kernel_tma(int M, int N) {
 
   int good = 0, bad = 0;
 
-  auto transposeFunction = make_layout(tensor_shape, GenRowMajor{});
+  auto transposeFunction = make_layout(tensor_shape, LayoutRight{});
 
   for (size_t i = 0; i < h_D.size(); ++i) {
     if (h_D[i] == h_S[transposeFunction(i)])
