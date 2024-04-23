@@ -2,7 +2,6 @@
 
 #include "transpose_naive.h"
 #include "transpose_smem.h"
-#include "transpose_smem_bank_conflict.h"
 #include "transpose_tmastore_vectorized.h"
 
 int main(int argc, char const **argv) {
