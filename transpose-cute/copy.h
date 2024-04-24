@@ -27,35 +27,34 @@
 template <class TensorS, class TensorD, class ThreadLayoutS,
           class ThreadLayoutD>
 __global__ static void __launch_bounds__(256, 1)
-    transposeKernelNaive(TensorS const S, TensorD const DT,
+    copyKernel(TensorS const S, TensorD const D,
                          ThreadLayoutS const tS, ThreadLayoutD const tD) {
   using namespace cute;
   using Element = typename TensorS::value_type;
 
   Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y);   // (bM, bN)
-  Tensor gDT = DT(make_coord(_, _), blockIdx.x, blockIdx.y); // (bN, bM)
+  Tensor gD = D(make_coord(_, _), blockIdx.x, blockIdx.y); // (bN, bM)
 
   Tensor tSgS = local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
-  Tensor tDgDT = local_partition(gDT, tD, threadIdx.x);
+  Tensor tDgD = local_partition(gD, tD, threadIdx.x);
 
-  Tensor rmem = make_tensor_like(tSgS);
+  Tensor rmem = make_tensor_like(tSgS);               // (ThrValM, ThrValN)
 
   copy(tSgS, rmem);
-  copy(rmem, tDgDT);
+  copy(rmem, tDgD);
 }
 
-int transpose_host_kernel_naive(int M, int N) {
-  printf("NO tma, NO smem, not vectorized\n");
+int copy_host_kernel(int M, int N) {
+  printf("Baseline copy; No transpose\n");
 
   using Element = float;
   using namespace cute;
 
   auto tensor_shape = make_shape(M, N);
-  auto tensor_shape_trans = make_shape(N, M);
 
   // Allocate and initialize
-  thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
-  thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
+  thrust::host_vector<Element> h_S(size(tensor_shape)); // (M, N)
+  thrust::host_vector<Element> h_D(size(tensor_shape)); // (M, N)
 
   for (size_t i = 0; i < h_S.size(); ++i)
     h_S[i] = static_cast<Element>(i);
@@ -68,16 +67,11 @@ int transpose_host_kernel_naive(int M, int N) {
   //
 
   auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
+  auto gmemLayoutD = make_layout(tensor_shape, LayoutRight{});
   Tensor tensor_S = make_tensor(
       make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
   Tensor tensor_D = make_tensor(
       make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
-
-  // Make a transposed view of the output
-  auto gmemLayoutDT = make_layout(tensor_shape, GenColMajor{});
-  Tensor tensor_DT = make_tensor(
-      make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutDT);
 
   //
   // Tile tensors
@@ -87,12 +81,11 @@ int transpose_host_kernel_naive(int M, int N) {
   using bN = Int<32>;
 
   auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
-  auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
 
   Tensor tiled_tensor_S =
       tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')
-  Tensor tiled_tensor_DT =
-      tiled_divide(tensor_DT, block_shape_trans); // ((bN, bM), n', m')
+  Tensor tiled_tensor_D =
+      tiled_divide(tensor_D, block_shape); // ((bN, bM), n', m')
 
   auto threadLayoutS =
       make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
@@ -112,7 +105,7 @@ int transpose_host_kernel_naive(int M, int N) {
 
   for (int i = 0; i < iterations; i++) {
     auto t1 = std::chrono::high_resolution_clock::now();
-    transposeKernelNaive<<<gridDim, blockDim>>>(tiled_tensor_S, tiled_tensor_DT,
+    copyKernel<<<gridDim, blockDim>>>(tiled_tensor_S, tiled_tensor_D,
                                                 threadLayoutS, threadLayoutD);
     cudaError result = cudaDeviceSynchronize();
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -136,10 +129,8 @@ int transpose_host_kernel_naive(int M, int N) {
 
   int good = 0, bad = 0;
 
-  auto transposeFunction = make_layout(tensor_shape, LayoutRight{});
-
   for (size_t i = 0; i < h_D.size(); ++i) {
-    if (h_D[i] == h_S[transposeFunction(i)])
+    if (h_D[i] == h_S[i])
       good++;
     else
       bad++;
