@@ -62,40 +62,20 @@ __global__ static void __launch_bounds__(256, 1)
   cute::copy(tDsD, tDgD);
 }
 
-template <bool isSwizzled = true> int transpose_host_kernel_smem(int M, int N) {
-  if constexpr (isSwizzled)
-    printf("NO tma, smem passthrough, not vectorized, swizzled\n");
-  else
-    printf("NO tma, smem passthrough, not vectorized, not swizzled\n");
+template <typename T, bool isSwizzled = true> void transpose_smem(TransposeParams<T> params) {
 
   using Element = float;
   using namespace cute;
 
-  auto tensor_shape = make_shape(M, N);
-  auto tensor_shape_trans = make_shape(N, M);
-
-  // Allocate and initialize
-  thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
-  thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
-
-  for (size_t i = 0; i < h_S.size(); ++i)
-    h_S[i] = static_cast<Element>(i);
-
-  thrust::device_vector<Element> d_S = h_S;
-  thrust::device_vector<Element> d_D = h_D;
-
   //
   // Make tensors
   //
-
-  // Could also have ColMajor.
+  auto tensor_shape = make_shape(params.M, params.N);
+  auto tensor_shape_trans = make_shape(params.N, params.M);
   auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
   auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
-
-  Tensor tensor_S = make_tensor(
-      make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
-  Tensor tensor_D = make_tensor(
-      make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
+  Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
+  Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
 
   //
   // Tile tensors
@@ -137,51 +117,13 @@ template <bool isSwizzled = true> int transpose_host_kernel_smem(int M, int N) {
       size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
   dim3 blockDim(size(threadLayoutS)); // 256 threads
 
-  int iterations = 10;
-
-  for (int i = 0; i < iterations; i++) {
-    auto t1 = std::chrono::high_resolution_clock::now();
-    if constexpr (isSwizzled) {
-      transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
-          tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
-          smemLayoutD_swizzle, threadLayoutD);
-    } else {
-      transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
-          tiled_tensor_S, tiled_tensor_D, smemLayoutS, threadLayoutS,
-          smemLayoutD, threadLayoutD);
-    }
-    cudaError result = cudaDeviceSynchronize();
-    auto t2 = std::chrono::high_resolution_clock::now();
-    if (result != cudaSuccess) {
-      std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
-                << std::endl;
-      return -1;
-    }
-    std::chrono::duration<double, std::milli> tDiff = t2 - t1;
-    double time_ms = tDiff.count();
-    std::cout << "Trial " << i << " Completed in " << time_ms << "ms ("
-              << 2e-6 * M * N * sizeof(Element) / time_ms << " GB/s)"
-              << std::endl;
+  if constexpr (isSwizzled) {
+    transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
+        tiled_tensor_S, tiled_tensor_D, smemLayoutS_swizzle, threadLayoutS,
+        smemLayoutD_swizzle, threadLayoutD);
+  } else {
+    transposeKernelSmem<<<gridDim, blockDim, smem_size>>>(
+        tiled_tensor_S, tiled_tensor_D, smemLayoutS, threadLayoutS,
+        smemLayoutD, threadLayoutD);
   }
-
-  //
-  // Verify
-  //
-
-  h_D = d_D;
-
-  int good = 0, bad = 0;
-
-  auto transposeFunction = make_layout(tensor_shape, LayoutRight{});
-
-  for (size_t i = 0; i < h_D.size(); ++i) {
-    if (h_D[i] == h_S[transposeFunction(i)])
-      good++;
-    else
-      bad++;
-  }
-
-  std::cout << "Success " << good << ", Fail " << bad << std::endl;
-
-  return 0;
 }
