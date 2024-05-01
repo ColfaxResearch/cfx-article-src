@@ -27,6 +27,12 @@ setup(
                 sources=["transpose_cute.cu"],
                 include_dirs=cutlass_include_dirs+cute_transpose_dir,
                 extra_compile_args={'nvcc': nvcc_flags},
+                libraries=ld_flags),
+        CUDAExtension(
+                name="copy_cute",  
+                sources=["copy_cute.cu"],
+                include_dirs=cutlass_include_dirs+cute_transpose_dir,
+                extra_compile_args={'nvcc': nvcc_flags},
                 libraries=ld_flags)
    ],
     cmdclass={

@@ -3,7 +3,7 @@
 #include "include/copy.h"
 #include "include/transpose_naive.h"
 #include "include/transpose_smem.h"
-//#include "include/transpose_tmastore_vectorized.h"
+#include "include/transpose_tmastore_vectorized.h"
 #include "include/util.h"
 
 int main(int argc, char const **argv) {
@@ -22,14 +22,17 @@ int main(int argc, char const **argv) {
   printf("Baseline copy; No transpose\n");
   benchmark<Element, false>(copy_baseline<Element>, M, N);
   
-  printf("\nNO tma, NO smem, not vectorized\n");
+  printf("\nNaive (no tma, no smem, not vectorized):\n");
   benchmark<Element>(transpose_naive<Element>, M, N);
 
-  printf("\nNO tma, smem passthrough, not vectorized, not swizzled\n");
+  printf("\nSMEM transpose (no tma, smem passthrough, not vectorized, not swizzled):\n");
   benchmark<Element>(transpose_smem<Element, false>, M, N);
 
-  printf("\nNO tma, smem passthrough, not vectorized, swizzled\n");
+  printf("\nSwizzle (no tma, smem passthrough, not vectorized, swizzled):\n");
   benchmark<Element>(transpose_smem<Element, true>, M, N);
+
+  printf("\nTMA (tma, smem passthrough, vectorized, swizzled):\n");
+  benchmark<Element>(transpose_tma<Element>, M, N);
 
   return 0;
 }

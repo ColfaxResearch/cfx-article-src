@@ -92,38 +92,16 @@ __global__ static void __launch_bounds__(256)
   tma_store_wait<0>();
 }
 
-int transpose_host_kernel_tma(int M, int N) {
-  printf("Vectorized load into registers, write out via TMA Store\n");
-  printf("Profiler reports uncoalesced smem accesses\n");
+template <typename Element> void transpose_tma(TransposeParams<Element> params) {
+//  printf("Vectorized load into registers, write out via TMA Store\n");
+//  printf("Profiler reports uncoalesced smem accesses\n");
 
-  using Element = float;
-  using namespace cute;
-
-  auto tensor_shape = make_shape(M, N);
-  auto tensor_shape_trans = make_shape(N, M);
-
-  // Allocate and initialize
-  thrust::host_vector<Element> h_S(size(tensor_shape));       // (M, N)
-  thrust::host_vector<Element> h_D(size(tensor_shape_trans)); // (N, M)
-
-  for (size_t i = 0; i < h_S.size(); ++i)
-    h_S[i] = static_cast<Element>(i);
-
-  thrust::device_vector<Element> d_S = h_S;
-  thrust::device_vector<Element> d_D = h_D;
-
-  //
-  // Make tensors
-  //
-
-  // Could also have ColMajor.
+  auto tensor_shape = make_shape(params.M, params.N);
+  auto tensor_shape_trans = make_shape(params.N, params.M);
   auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
   auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
-
-  Tensor tensor_S = make_tensor(
-      make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
-  Tensor tensor_D = make_tensor(
-      make_gmem_ptr(thrust::raw_pointer_cast(d_D.data())), gmemLayoutD);
+  Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
+  Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
 
   //
   // Tile tensors
@@ -135,10 +113,8 @@ int transpose_host_kernel_tma(int M, int N) {
   auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
   auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
 
-  Tensor tiled_tensor_S =
-      tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')
-  Tensor tiled_tensor_D =
-      tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
+  Tensor tiled_tensor_S = tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')
+  Tensor tiled_tensor_D = tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
 
   auto threadLayoutS =
       make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});
@@ -176,46 +152,4 @@ int transpose_host_kernel_tma(int M, int N) {
   transposeKernelTMA<<<gridDim, blockDim, smem_size>>>(
       tiled_tensor_S, smemLayoutD, tiled_copy_S, tmaD, gmemLayoutD, tileShapeD,
       threadLayoutM, smemLayoutM);
-
-  int iterations = 10;
-
-  for (int i = 0; i < iterations; i++) {
-    auto t1 = std::chrono::high_resolution_clock::now();
-    transposeKernelTMA<<<gridDim, blockDim, smem_size>>>(
-        tiled_tensor_S, smemLayoutD, tiled_copy_S, tmaD, gmemLayoutD,
-        tileShapeD, threadLayoutM, smemLayoutM);
-    cudaError result = cudaDeviceSynchronize();
-    auto t2 = std::chrono::high_resolution_clock::now();
-    if (result != cudaSuccess) {
-      std::cerr << "CUDA Runtime error: " << cudaGetErrorString(result)
-                << std::endl;
-      return -1;
-    }
-    std::chrono::duration<double, std::milli> tDiff = t2 - t1;
-    double time_ms = tDiff.count();
-    std::cout << "Trial " << i << " Completed in " << time_ms << "ms ("
-              << 2e-6 * M * N * sizeof(Element) / time_ms << " GB/s)"
-              << std::endl;
-  }
-
-  //
-  // Verify
-  //
-
-  h_D = d_D;
-
-  int good = 0, bad = 0;
-
-  auto transposeFunction = make_layout(tensor_shape, LayoutRight{});
-
-  for (size_t i = 0; i < h_D.size(); ++i) {
-    if (h_D[i] == h_S[transposeFunction(i)])
-      good++;
-    else
-      bad++;
-  }
-
-  std::cout << "Success " << good << ", Fail " << bad << std::endl;
-
-  return 0;
 }
