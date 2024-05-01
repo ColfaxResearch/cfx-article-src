@@ -19,5 +19,8 @@ transpose: $(OBJECTS)
 main.o:
 	$(CXX) -c $(CXXFLAGS) -o "$@" main.cu
 
+python:
+	CUTE_TRANSPOSE_DIR=${PWD} CUTLASS_DIR=${PWD}/${CUTLASS_DIR} pip3 install python/
+
 clean: 
 	rm -f $(OBJECTS) transpose

@@ -1,10 +1,10 @@
 #include "cutlass/util/command_line.h"
 
-#include "copy.h"
-#include "transpose_naive.h"
-#include "transpose_smem.h"
-//#include "transpose_tmastore_vectorized.h"
-#include "util.h"
+#include "include/copy.h"
+#include "include/transpose_naive.h"
+#include "include/transpose_smem.h"
+//#include "include/transpose_tmastore_vectorized.h"
+#include "include/util.h"
 
 int main(int argc, char const **argv) {
 
