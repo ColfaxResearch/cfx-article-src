@@ -45,7 +45,7 @@ transposeKernelNaive(TensorS const S, TensorD const DT,
   copy(rmem, tDgDT);
 }
 
-template <typename T> void transpose_naive(TransposeParams<T> params) {
+template <typename Element> void transpose_naive(TransposeParams<Element> params) {
   
   //
   // Make Tensors

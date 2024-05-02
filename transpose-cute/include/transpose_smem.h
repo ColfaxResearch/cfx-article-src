@@ -62,9 +62,8 @@ __global__ static void __launch_bounds__(256, 1)
   cute::copy(tDsD, tDgD);
 }
 
-template <typename T, bool isSwizzled = true> void transpose_smem(TransposeParams<T> params) {
+template <typename Element, bool isSwizzled = true> void transpose_smem(TransposeParams<Element> params) {
 
-  using Element = float;
   using namespace cute;
 
   //
