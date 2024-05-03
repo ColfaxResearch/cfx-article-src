@@ -14,12 +14,12 @@ int main(int argc, char const **argv) {
   using Element = float;
 
   int M, N;
-  cmd.get_cmd_line_argument("M", M, 4096);
-  cmd.get_cmd_line_argument("N", N, 4096);
+  cmd.get_cmd_line_argument("M", M, 32768);
+  cmd.get_cmd_line_argument("N", N, 32768);
 
   std::cout << "(M, N): " << M << ", " << N << std::endl;
 
-  printf("Baseline copy; No transpose\n");
+//  printf("Baseline copy; No transpose\n");
   benchmark<Element, false>(copy_baseline<Element>, M, N);
   
   printf("\nNaive (no tma, no smem, not vectorized):\n");

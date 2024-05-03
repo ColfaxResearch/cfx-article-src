@@ -25,19 +25,41 @@
 #include "shared_storage.h"
 #include "util.h"
 
-template <class TensorS, class TensorD, class ThreadLayoutS,
-          class ThreadLayoutD>
+template <class TensorS, class TensorD, class ThreadLayout, class VecLayout>
 __global__ static void __launch_bounds__(256, 1)
-    copyKernel(TensorS const S, TensorD const D,
-                         ThreadLayoutS const tS, ThreadLayoutD const tD) {
+    copyKernel(TensorS const S, TensorD const D, ThreadLayout, VecLayout) {
   using namespace cute;
   using Element = typename TensorS::value_type;
 
   Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y);   // (bM, bN)
   Tensor gD = D(make_coord(_, _), blockIdx.x, blockIdx.y); // (bN, bM)
 
-  Tensor tSgS = local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
-  Tensor tDgD = local_partition(gD, tD, threadIdx.x);
+  // Define `AccessType` which controls the size of the actual memory access.
+  using AccessType = cutlass::AlignedArray<Element, size(VecLayout{})>;
+
+  // A copy atom corresponds to one hardware memory access.
+  using Atom = Copy_Atom<UniversalCopy<AccessType>, Element>;
+
+  // Construct tiled copy, a tiling of copy atoms.
+  //
+  // Note, this assumes the vector and thread layouts are aligned with contigous data
+  // in GMEM. Alternative thread layouts are possible but may result in uncoalesced
+  // reads. Alternative vector layouts are also possible, though incompatible layouts
+  // will result in compile time errors.
+  auto tiled_copy =
+    make_tiled_copy(
+      Atom{},                       // access size
+      ThreadLayout{},               // thread layout
+      VecLayout{});                 // vector layout (e.g. 4x1)
+
+  // Construct a Tensor corresponding to each thread's slice.
+  auto thr_copy = tiled_copy.get_thread_slice(threadIdx.x);
+
+  Tensor tSgS = thr_copy.partition_S(gS);             // (CopyOp, CopyM, CopyN)
+  Tensor tDgD = thr_copy.partition_D(gD);             // (CopyOp, CopyM, CopyN)
+
+//  Tensor tSgS = local_partition(gS, ThreadLayout{}, threadIdx.x); // (ThrValM, ThrValN)
+//  Tensor tDgD = local_partition(gD, ThreadLayout{}, threadIdx.x);
 
   Tensor rmem = make_tensor_like(tSgS);               // (ThrValM, ThrValN)
 
@@ -63,7 +85,7 @@ template <typename T> void copy_baseline(TransposeParams<T> params) {
   // Tile tensors
   //
   using bM = Int<32>;
-  using bN = Int<32>;
+  using bN = Int<1024>;
 
   auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
 
@@ -72,10 +94,10 @@ template <typename T> void copy_baseline(TransposeParams<T> params) {
   Tensor tiled_tensor_D =
       tiled_divide(tensor_D, block_shape); // ((bN, bM), n', m')
 
-  auto threadLayoutS =
+  auto threadLayout =
       make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
-  auto threadLayoutD =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
+
+  auto vec_layout = make_layout(make_shape(Int<4>{}, Int<1>{}));
 
   //
   // Determine grid and block dimensions
@@ -84,8 +106,8 @@ template <typename T> void copy_baseline(TransposeParams<T> params) {
   dim3 gridDim(
       size<1>(tiled_tensor_S),
       size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
-  dim3 blockDim(size(threadLayoutS)); // 256 threads
+  dim3 blockDim(size(threadLayout)); // 256 threads
 
   copyKernel<<<gridDim, blockDim>>>(tiled_tensor_S, tiled_tensor_D,
-                                       threadLayoutS, threadLayoutD);
+                                       threadLayout,  vec_layout);
 }

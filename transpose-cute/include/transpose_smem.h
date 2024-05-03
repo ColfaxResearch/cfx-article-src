@@ -80,8 +80,8 @@ template <typename Element, bool isSwizzled = true> void transpose_smem(Transpos
   // Tile tensors
   //
 
-  using bM = Int<32>;
-  using bN = Int<32>;
+  using bM = Int<64>;
+  using bN = Int<64>;
 
   auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
   auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)

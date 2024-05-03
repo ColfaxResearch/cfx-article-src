@@ -6,7 +6,7 @@ import copy_cute as cc
 from torch.utils.benchmark import Timer
 from torch.utils.benchmark import Measurement
 
-M = N = 4096
+M = N = 32768
 cuda = torch.device('cuda')
 A = torch.normal(0,1,size=(M, N)).to(device=cuda)
 
