@@ -47,7 +47,7 @@ std::string get_version_info(Version const ver) {
     return "SMEM transpose (no tma, smem passthrough, not vectorized, not swizzled):"; 
   else if(ver == swizzle) 
     return "Swizzle (no tma, smem passthrough, not vectorized, swizzled):";
-  else if(ver == swizzle) 
+  else if(ver == tma) 
     return "TMA (tma, smem passthrough, vectorized, swizzled):";
 }
 

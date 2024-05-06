@@ -9,34 +9,32 @@ from torch.utils.benchmark import Measurement
 M = N = 32768
 cuda = torch.device('cuda')
 A = torch.normal(0,1,size=(M, N)).to(device=cuda)
+AT_reference = torch.transpose(A, 0, 1)
 
-timer = Timer(
-    stmt="cc.copy(A)",
-    globals={"cc": cc, "A": A},
-    num_threads=1,
-)
-
-m: Measurement = timer.blocked_autorange(min_run_time=1)
-print("Baseline copy:")
-print(m)
-print("Performance: {:.2f} GB/s".format(2*M*N*A.element_size()/m.mean*pow(10,-9)))
-A_copy = cc.copy(A)
-print("Validation: {}".format("success" if torch.all(torch.eq(A_copy,A)) else "failed"))
-print()
-
-AT_torch = torch.transpose(A, 0, 1)
-
-for ver in [tc.version.naive,tc.version.smem,tc.version.swizzle,tc.version.tma]:
+def benchmark(stmt, glob, desc): 
   timer = Timer(
-      stmt="tc.transpose(A, version=ver)",
-      globals={"tc": tc, "A": A, "ver": ver},
+      stmt=stmt,
+      globals=glob,
       num_threads=1,
   )
+  
+  m: Measurement = timer.blocked_autorange(min_run_time=3)
+  print(desc)
+  print("Mean: {{:.{0}g}} ms ({{:.{0}g}} GB/s)".format(m.significant_figures).format(m.mean*pow(10,3),2*M*N*A.element_size()/m.mean*pow(10,-9)))
+  print("IQR: {{:.{}g}} us".format(m.significant_figures).format(m.iqr*pow(10,6)))
 
-  m: Measurement = timer.blocked_autorange(min_run_time=1)
-  print("{}".format(tc.get_version_info(ver)))
-  print(m)
-  AT = tc.transpose(A, version=ver)
-  print("Performance: {:.2f} GB/s".format(2*M*N*A.element_size()/m.mean*pow(10,-9)))
-  print("Validation: {}".format("success" if torch.all(torch.eq(AT_torch,AT)) else "failed"))
+def validate(res, reference):
+  print("Validation: {}".format("success" if torch.all(torch.eq(reference,res)) else "failed"))
+
+
+benchmark("cc.copy(A)",{"cc": cc, "A": A},"Baseline copy:")
+validate(cc.copy(A), A)
+print()
+
+benchmark("torch.transpose(A, 0, 1).contiguous()",{"A": A},"Torch transpose:")
+print()
+
+for ver in [tc.version.naive,tc.version.smem,tc.version.swizzle,tc.version.tma]:
+  benchmark("tc.transpose(A, version=ver)",{"tc": tc, "A": A, "ver": ver},tc.get_version_info(ver))
+  validate(tc.transpose(A, version=ver), AT_reference)
   print()
