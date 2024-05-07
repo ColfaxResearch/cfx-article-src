@@ -17,7 +17,7 @@ int main(int argc, char const **argv) {
   cmd.get_cmd_line_argument("M", M, 32768);
   cmd.get_cmd_line_argument("N", N, 32768);
 
-  std::cout << "(M, N): " << M << ", " << N << std::endl;
+  std::cout << "Matrix size: " << M << " x " << N << std::endl;
 
   printf("Baseline copy; No transpose\n");
   benchmark<Element, false>(copy_baseline<Element>, M, N);
