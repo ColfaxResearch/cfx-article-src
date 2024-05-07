@@ -19,7 +19,7 @@ int main(int argc, char const **argv) {
 
   std::cout << "(M, N): " << M << ", " << N << std::endl;
 
-//  printf("Baseline copy; No transpose\n");
+  printf("Baseline copy; No transpose\n");
   benchmark<Element, false>(copy_baseline<Element>, M, N);
   
   printf("\nNaive (no tma, no smem, not vectorized):\n");
