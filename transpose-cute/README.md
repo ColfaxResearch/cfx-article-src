@@ -1,6 +1,6 @@
-# CUTE Transpose
+# CuTe Transpose
 
-Example code for the CUTE Transpose tutorial.
+Example code for the CuTe Transpose tutorial.
 
 # Installation
 
@@ -22,7 +22,7 @@ make
 ./transpose
 ```
 
-To compile the python moulde and run the python example:
+To compile the python module and run the python example:
 ```
 make python -B
 python3 torch_benchmark.py
