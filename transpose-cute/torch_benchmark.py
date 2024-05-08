@@ -41,6 +41,10 @@ print()
 benchmark("torch.transpose(A, 0, 1).contiguous()",{"A": A},"Torch transpose:")
 print()
 
+compiled_transpose = torch.compile(lambda A: torch.transpose(A, 0, 1).contiguous())
+benchmark("compiled_transpose(A)",{"compiled_transpose":compiled_transpose,"A": A},"Torch transpose (compiled):")
+print()
+
 for ver in [tc.version.naive,tc.version.smem,tc.version.swizzle,tc.version.tma]:
   benchmark("tc.transpose(A, version=ver)",{"tc": tc, "A": A, "ver": ver},tc.get_version_info(ver))
   validate(tc.transpose(A, version=ver), AT_reference)
