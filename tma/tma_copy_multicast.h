@@ -152,6 +152,7 @@ __global__ static void __launch_bounds__(kNumThreads, 1)
 
   if (warp_idx == 0 and lane_predicate) {
     cute::copy(tmaStore, cta_tmaD.partition_S(sS), cta_tmaD.partition_D(gD));
+    // cute::tma_store_arrive();
   }
   // cute::tma_store_wait<0>();
   cute::cluster_sync();
