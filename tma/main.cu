@@ -1,8 +1,8 @@
 #include "cutlass/util/command_line.h"
 
-// #include "scale_tma_kernel.h"
+#include "scale_tma_kernel.h"
 #include "tma_copy.h"
-// #include "tma_copy_multicast.h"
+#include "tma_copy_multicast.h"
 
 int main(int argc, char const **argv) {
 
@@ -17,11 +17,11 @@ int main(int argc, char const **argv) {
   std::cout << "(M, N): " << M << ", " << N << std::endl;
 
   copy_host_tma_load_and_store_kernel(M, N, iterations);
-//   scaleTmaKernelHost(M, N, iterations);
-//   copy_host_tma_load_and_store_kernel_multicast<true, 2>(M, N, iterations);
-//   copy_host_tma_load_and_store_kernel_multicast<false, 2>(M, N, iterations);
-//   copy_host_tma_load_and_store_kernel_multicast<true, 4>(M, N, iterations);
-//   copy_host_tma_load_and_store_kernel_multicast<false, 4>(M, N, iterations);
+  scaleTmaKernelHost(M, N, iterations);
+  copy_host_tma_load_and_store_kernel_multicast<true, 2>(M, N, iterations);
+  copy_host_tma_load_and_store_kernel_multicast<false, 2>(M, N, iterations);
+  copy_host_tma_load_and_store_kernel_multicast<true, 4>(M, N, iterations);
+  copy_host_tma_load_and_store_kernel_multicast<false, 4>(M, N, iterations);
 
   return 0;
 }
