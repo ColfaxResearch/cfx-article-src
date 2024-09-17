@@ -242,6 +242,10 @@ struct CollectiveMainloop {
             pipeline.consumer_release(smem_pipe_read);
             ++smem_pipe_read;
         }
+
+        // Make sure all warpgroups have finished mma before writeout to smem
+        // Without this, get race condition since smem for output C is in union with operand B
+        cutlass::arch::NamedBarrier::sync(NumMmaThreads, 0);
     }
 
 };
