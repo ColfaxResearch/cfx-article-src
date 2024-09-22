@@ -27,7 +27,7 @@ To compile and run the multistage example, change 'APP' in the Makefile to point
 
 # FP32 vs FP16 accumulation
 
-Default sizes are chosen for FP32 accumulation.
+Kernels are compiled to use FP32 accumulation by default.
 
 To try out a version with FP16 accumulation, comment in the relevant option directly in the code.
 
