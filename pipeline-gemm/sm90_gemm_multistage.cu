@@ -368,39 +368,34 @@ gemm_tn(int m, int n, int k,
   auto bP = Int<2>{};  // Pipeline
   using AtomLayoutMNK = Layout<Shape<_2, _1, _1>>;
 
-  // auto bM = Int<192>{};
-  // auto bN = Int<256>{};
-  // auto bK = Int<128>{};
-  // auto cta_tiler = make_shape(bM, bN, bK);                   // (BLK_M, BLK_N, BLK_K)
-  // auto bP = Int<2>{};  // Pipeline
-  // using AtomLayoutMNK = Layout<Shape<_3, _1, _1>>;
-
-//   auto bM = Int<256>{};
-//   auto bN = Int<256>{};
-//   auto bK = Int<96>{};
-//   auto cta_tiler = make_shape(bM, bN, bK);                   // (BLK_M, BLK_N, BLK_K)
-//   auto bP = Int<2>{};  // Pipeline
-//   using AtomLayoutMNK = Layout<Shape<_4, _1, _1>>;
-
   // Define the smem layouts (static)
   auto sA = tile_to_shape(GMMA::Layout_K_SW128_Atom<TA>{}, make_shape(bM,bK,bP));
   auto sB = tile_to_shape(GMMA::Layout_K_SW128_Atom<TB>{}, make_shape(bN,bK,bP));
-  
-  // Use with bK = 96
-//   auto sA = tile_to_shape(GMMA::Layout_K_SW64_Atom<TA>{}, make_shape(bM,bK,bP));
-//   auto sB = tile_to_shape(GMMA::Layout_K_SW64_Atom<TB>{}, make_shape(bN,bK,bP));
 
-  auto sC = tile_to_shape(GMMA::Layout_K_SW128_Atom<TC>{}, make_shape(bM,bN));
-
-  // Define the MMA
-  
+  // Define the Tiled MMA
   TiledMMA tiled_mma = make_tiled_mma(SM90_64x192x16_F32F16F16_SS<GMMA::Major::K,GMMA::Major::K>{},
     AtomLayoutMNK{});
 
-// TiledMMA tiled_mma = make_tiled_mma(SM90_64x256x16_F16F16F16_SS<GMMA::Major::K,GMMA::Major::K>{},
-//     AtomLayoutMNK{});
+  // For FP16 ACCUM example, enable these tile sizes and variable definitions.
+  // auto bM = Int<256>{};
+  // auto bN = Int<256>{};
+  // auto bK = Int<96>{};
+  // auto cta_tiler = make_shape(bM, bN, bK);                   // (BLK_M, BLK_N, BLK_K)
+  // auto bP = Int<2>{};  // Pipeline
+  // using AtomLayoutMNK = Layout<Shape<_4, _1, _1>>;
 
-//   print(tiled_mma);
+  // auto sA = tile_to_shape(GMMA::Layout_K_SW64_Atom<TA>{}, make_shape(bM,bK,bP));
+  // auto sB = tile_to_shape(GMMA::Layout_K_SW64_Atom<TB>{}, make_shape(bN,bK,bP));
+
+  // TiledMMA tiled_mma = make_tiled_mma(SM90_64x256x16_F16F16F16_SS<GMMA::Major::K,GMMA::Major::K>{},
+  //   AtomLayoutMNK{});
+
+  //
+  // Back to common setting
+  //
+  
+  // Define the smem layout for the output (static)
+  auto sC = tile_to_shape(GMMA::Layout_K_SW128_Atom<TC>{}, make_shape(bM,bN));
 
   // Define the TMAs
   // Create Global memory tensors for TMA inspection
