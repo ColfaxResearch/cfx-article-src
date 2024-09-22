@@ -98,8 +98,8 @@ template <typename Element> void transpose_tma(TransposeParams<Element> params) 
 
   auto tensor_shape = make_shape(params.M, params.N);
   auto tensor_shape_trans = make_shape(params.N, params.M);
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
   Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
   Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
 
@@ -117,7 +117,7 @@ template <typename Element> void transpose_tma(TransposeParams<Element> params) 
   Tensor tiled_tensor_D = tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
 
   auto threadLayoutS =
-      make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});
+      make_layout(make_shape(Int<32>{}, Int<8>{}), GenRowMajor{});
   auto vecLayoutS = make_layout(make_shape(Int<1>{}, Int<4>{}));
   using AccessTypeS = cutlass::AlignedArray<Element, size(vecLayoutS)>;
   using AtomS = Copy_Atom<UniversalCopy<AccessTypeS>, Element>;

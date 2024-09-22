@@ -53,7 +53,7 @@ template <typename T, bool isTranspose = true> int benchmark(void (*transpose)(T
   
     int bad = 0;
     if constexpr (isTranspose) {
-      auto transpose_function = make_layout(tensor_shape_S, LayoutRight{});
+      auto transpose_function = make_layout(tensor_shape_S, GenRowMajor{});
       for (size_t i = 0; i < h_D.size(); ++i) 
         if (h_D[i] != h_S[transpose_function(i)])
           bad++;

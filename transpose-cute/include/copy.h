@@ -105,8 +105,8 @@ template <typename T> void copy_baseline(TransposeParams<T> params) {
   // Make tensors
   //
   auto tensor_shape = make_shape(params.M, params.N);
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape, LayoutRight{});
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape, GenRowMajor{});
   Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
   Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
  
@@ -124,7 +124,7 @@ template <typename T> void copy_baseline(TransposeParams<T> params) {
       tiled_divide(tensor_D, block_shape); // ((bN, bM), n', m')
 
   auto threadLayout =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
 
   auto vec_layout = make_layout(make_shape(Int<4>{}, Int<1>{}));
 
