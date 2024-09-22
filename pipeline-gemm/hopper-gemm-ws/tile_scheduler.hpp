@@ -1,3 +1,11 @@
+/******************************************************************************
+ * Copyright (c) 2024, Jay Shah, Ganesh Bikshandi, Ying Zhang, Vijay Thakkar, Pradeep Ramani, Tri Dao.
+ ******************************************************************************/
+
+//
+// Composable warp-specialized kernel design adapted from FlashAttention-3 code.
+// 
+
 #pragma once
 
 #include "cutlass/fast_math.h"
