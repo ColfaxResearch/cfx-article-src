@@ -1,21 +1,24 @@
-#include "cutlass/util/command_line.h"
-
 #include "hopper-gemm-ws/hopper_gemm_kernel_launch.h"
 
-int main(int argc, char const **argv) {
+int main(int argc, char**argv) {
 
-  cutlass::CommandLine cmd(argc, argv);
-  // Parses the command line
+  int m = 8192;
+  if (argc >= 2)
+    sscanf(argv[1], "%d", &m);
 
-  int M, N, K, iterations;
-  cmd.get_cmd_line_argument("M", M, 8192);
-  cmd.get_cmd_line_argument("N", N, 8192);
-  cmd.get_cmd_line_argument("K", K, 8192);
-  cmd.get_cmd_line_argument("iterations", iterations, 10);
+  int n = 8192;
+  if (argc >= 3)
+    sscanf(argv[2], "%d", &n);
 
-  std::cout << "Matrix size: " << M << " x " << N << " x " << K << std::endl;
+  int k = 8192;
+  if (argc >= 4)
+    sscanf(argv[3], "%d", &k);
+
+  int iterations = 10;
+
+  print("M N K = [%d %d %d].\n", m, n, k);
   
-  gemm_tn_launch(M, N, K, iterations);
+  gemm_tn_launch(m, n, k, iterations);
 
   return 0;
 }

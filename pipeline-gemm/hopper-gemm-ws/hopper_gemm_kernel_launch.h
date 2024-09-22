@@ -193,13 +193,13 @@ void gemm_tn_launch(int m, int n, int k, int iterations) {
   for (int j = 0; j < m*n; ++j) {
     float diff = std::fabs(float(cute_result[j] - cute_result_ref[j]));
     if (diff > max_diff) { max_diff = diff; index = j; }
-    // if(j < 128)
-    //     std::cout << cute_result[j] << " " << cute_result_ref[j] << std::endl;
-    // std::cout << "diff at  " << j << " equals " << diff << std::endl;
   }
 
-  std::cout << "max diff = " << max_diff << " at index " << index << std::endl;
-  std::cout << cute_result[index] << " " << cute_result_ref[index] << std::endl;
+  if(max_diff > .001) {
+    printf("Validation error.\n");
+    std::cout << "max diff = " << max_diff << " at index " << index << std::endl;
+    std::cout << cute_result[index] << " " << cute_result_ref[index] << std::endl;
+  }
 
   d_C = h_C;
 
