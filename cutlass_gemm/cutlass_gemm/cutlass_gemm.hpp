@@ -51,9 +51,9 @@ template<typename DataType, typename OutputType> void cutlass_gemm_wrapper(int M
   float alpha = 1.0f;
   float beta = 0.0f;
 
-  int lda = M;
-  int ldb = K;
-  int ldc = M;
+  int lda = K;
+  int ldb = N;
+  int ldc = N;
 
   Gemm gemm_op;
   gemm_op({
