@@ -178,8 +178,8 @@ int scaleTmaKernelHost(int M, int N, int iterations = 1) {
   // Make tensors
   //
 
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape, LayoutRight{});
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape, GenRowMajor{});
   Tensor tensor_S = make_tensor(
       make_gmem_ptr(thrust::raw_pointer_cast(d_S.data())), gmemLayoutS);
   Tensor tensor_D = make_tensor(
