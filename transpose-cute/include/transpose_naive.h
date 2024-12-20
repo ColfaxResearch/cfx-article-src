@@ -34,7 +34,7 @@ transposeKernelNaive(TensorS const S, TensorD const DT,
   using Element = typename TensorS::value_type;
 
   Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y);   // (bM, bN)
-  Tensor gDT = DT(make_coord(_, _), blockIdx.x, blockIdx.y); // (bN, bM)
+  Tensor gDT = DT(make_coord(_, _), blockIdx.x, blockIdx.y); // (bM, bN)
 
   Tensor tSgS = local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
   Tensor tDgDT = local_partition(gDT, tD, threadIdx.x);
@@ -72,7 +72,7 @@ template <typename Element> void transpose_naive(TransposeParams<Element> params
   auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
   
   Tensor tiled_tensor_S = tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')
-  Tensor tiled_tensor_DT = tiled_divide(tensor_DT, block_shape_trans); // ((bN, bM), n', m')
+  Tensor tiled_tensor_DT = tiled_divide(tensor_DT, block_shape); // ((bM, bN), m', n')
   
   auto threadLayoutS =
       make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
