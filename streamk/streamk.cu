@@ -1,3 +1,7 @@
+/******************************************************************************
+ * Copyright (c) 2024 Colfax Research                                         *
+ ******************************************************************************/
+
 #include "cli_options.h"
 #include "hopper_gemm_kernel_launch.h"
 #include "kernel_traits.h"

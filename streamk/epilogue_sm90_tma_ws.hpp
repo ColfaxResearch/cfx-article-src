@@ -1,10 +1,6 @@
 /******************************************************************************
- * Copyright (c) 2024, Jay Shah, Ganesh Bikshandi, Ying Zhang, Vijay Thakkar, Pradeep Ramani, Tri Dao.
+ * Copyright (c) 2024 Colfax Research                                         *
  ******************************************************************************/
-
-//
-// Composable warp-specialized kernel design adapted from FlashAttention-3 code.
-// 
 
 #pragma once
 
