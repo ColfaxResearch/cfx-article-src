@@ -59,7 +59,7 @@
 
 template <class TensorS, class TensorD, class ThreadLayout, class VecLayout>
 __global__ static void __launch_bounds__(256, 1)
-    copyKernel(TensorS const S, TensorD const D, ThreadLayout, VecLayout) {
+    copyKernelDirect(TensorS const S, TensorD const D, ThreadLayout, VecLayout) {
   using namespace cute;
   using Element = typename TensorS::value_type;
 
@@ -74,7 +74,7 @@ __global__ static void __launch_bounds__(256, 1)
 
   // Construct tiled copy, a tiling of copy atoms.
   //
-  // Note, this assumes the vector and thread layouts are aligned with contiguous data
+  // Note, this assumes the vector and thread layouts are aligned with contigous data
   // in GMEM. Alternative thread layouts are possible but may result in uncoalesced
   // reads. Alternative vector layouts are also possible, though incompatible layouts
   // will result in compile time errors.
@@ -82,7 +82,7 @@ __global__ static void __launch_bounds__(256, 1)
     make_tiled_copy(
       Atom{},                       // access size
       ThreadLayout{},               // thread layout
-      VecLayout{});                 // vector layout (e.g. 4x1)
+      VecLayout{});                 // vector layout
 
   // Construct a Tensor corresponding to each thread's slice.
   auto thr_copy = tiled_copy.get_thread_slice(threadIdx.x);
@@ -90,27 +90,10 @@ __global__ static void __launch_bounds__(256, 1)
   Tensor tSgS = thr_copy.partition_S(gS);             // (CopyOp, CopyM, CopyN)
   Tensor tDgD = thr_copy.partition_D(gD);             // (CopyOp, CopyM, CopyN)
 
-#if 1
-  // Construct a register-backed Tensor with the same shape as each thread's partition
-  // Use make_fragment because the first mode is the instruction-local mode
-  Tensor rmem = make_fragment_like(tDgD);             // (CopyOp, CopyM, CopyN)
-  copy(tiled_copy, tSgS, rmem);
-  copy(tiled_copy, rmem, tDgD);
-#else
-  // Same as copy(tiled_copy, tSgS, tDgD)
-  #pragma unroll
-  for(int i = 0; i < size<1>(tSgS); ++i) {
-    #pragma unroll
-    for(int j = 0; j < size<2>(tSgS); ++j) {
-      Tensor rmem = make_fragment_like(tSgS(_,i,j));
-      copy(tiled_copy, tSgS(_, i, j), rmem);
-      copy(tiled_copy, rmem, tDgD(_, i, j));
-    }
-  }
-#endif
+  copy(tiled_copy, tSgS, tDgD);
 }
 
-template <typename T> void copy_baseline(TransposeParams<T> params) {
+template <typename T> void copy_direct(TransposeParams<T> params) {
 
   using Element = float;
   using namespace cute;
@@ -151,6 +134,6 @@ template <typename T> void copy_baseline(TransposeParams<T> params) {
       size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
   dim3 blockDim(size(threadLayout)); // 256 threads
 
-  copyKernel<<<gridDim, blockDim>>>(tiled_tensor_S, tiled_tensor_D,
+  copyKernelDirect<<<gridDim, blockDim>>>(tiled_tensor_S, tiled_tensor_D,
                                        threadLayout,  vec_layout);
 }
