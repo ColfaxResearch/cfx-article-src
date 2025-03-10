@@ -21,7 +21,7 @@ int main(int argc, char const **argv) {
   int M, N, iterations;
   cmd.get_cmd_line_argument("M", M, 8192*8);
   cmd.get_cmd_line_argument("N", N, 1024);
-  cmd.get_cmd_line_argument("iterations", iterations, 1);
+  cmd.get_cmd_line_argument("iterations", iterations, 10);
 
   std::cout << "Matrix size: " << M << " x " << N << std::endl;
 
