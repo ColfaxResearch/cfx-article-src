@@ -4,7 +4,7 @@
 // #include "include/copy_fma.h"
 // #include "include/fma_inner_product.h"
 #include "include/fma_inner_product_naive.h"
-#include "include/copy_smem.h"
+// #include "include/copy_smem.h"
 #include "include/copy_direct.h"
 #include "include/transpose_naive.h"
 #include "include/transpose_smem.h"
