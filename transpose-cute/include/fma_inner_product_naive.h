@@ -74,7 +74,6 @@ __global__ static void __launch_bounds__(256, 1)
 
   Tensor sA = make_tensor(make_smem_ptr(shared_storage.smem_a.data()), SmemLayoutA{}); // (bM, bN)
 
-  // SM80_CP_ASYNC_CACHEALWAYS
   auto tiled_copy_load =
     make_tiled_copy(
       Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<uint128_t>, Element>{},
@@ -99,12 +98,12 @@ __global__ static void __launch_bounds__(256, 1)
   cp_async_fence();
   cp_async_wait<0>();
   __syncthreads();
-  // have A and B vectors in smem now
+  // have A vector in smem now
 
   Tensor accum = make_fragment_like(sA(_, _0{}));
   clear(accum);
   
-//   static_assert(size<0>(sA) == 1, "Suppose bM = 1.");
+  static_assert(size<0>(sA) == 1, "Suppose bM = 1.");
 
   Tensor sO = make_tensor(make_smem_ptr(shared_storage.smem_out.data()), ThreadLayout{});
   Tensor tOsO = thr_copy_store.partition_S(sO);
@@ -150,7 +149,6 @@ template <typename T> void copy_smem_fma_naive(TransposeParams<T> params) {
   // Tile tensors
   //
   using bM = Int<1>;
-//   using bM = Int<2>;
   using bN = Int<1024>;
 
   auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
