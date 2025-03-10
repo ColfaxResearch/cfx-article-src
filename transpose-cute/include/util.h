@@ -1,18 +1,18 @@
 #pragma once
 
 template <typename T> struct TransposeParams {
-  T *input;
-  T *output;
+  T *__restrict__ input;
+  T *__restrict__ output;
 
   const int M;
   const int N;
 
-  TransposeParams(T *input_, T *output_, int M_, int N_)
+  TransposeParams(T *__restrict__ input_, T *__restrict__ output_, int M_, int N_)
       : input(input_), output(output_), M(M_), N(N_) {}
 };
 
 //template <typename T> int benchmark(void (*transpose)(int M, int N, T* input, T* output), int M, int N, int iterations=10, bool verify=true) {
-template <typename T, bool isTranspose = true> int benchmark(void (*transpose)(TransposeParams<T> params), int M, int N, int iterations=10, bool verify=true) {
+template <typename T, bool isTranspose = true, bool isFMA = false> int benchmark(void (*transpose)(TransposeParams<T> params), int M, int N, int iterations=10, bool verify=true) {
   using namespace cute;
 
   auto tensor_shape_S = make_shape(M, N);
@@ -43,9 +43,21 @@ template <typename T, bool isTranspose = true> int benchmark(void (*transpose)(T
     }
     std::chrono::duration<double, std::milli> tDiff = t2 - t1;
     double time_ms = tDiff.count();
+    int numThreads = 256;
+    // int numThreads = 128;
+    size_t bytes = !isFMA ? 2 * M * N * sizeof(T) : (M * N + M * numThreads) * sizeof(T);
+    
     std::cout << "Trial " << i << " Completed in " << time_ms << "ms ("
-              << 2e-6 * M * N * sizeof(T) / time_ms << " GB/s)"
+              << 1e-6 * bytes / time_ms << " GB/s)"
               << std::endl;
+
+    if(isFMA) {
+      uint64_t flops = numThreads * 2 * uint64_t(M) * uint64_t(N);
+      double AI = double(flops) / double(bytes);
+      std::cout << "Arithmetic Intensity = " << AI << std::endl;
+      std::cout << "TFLOPs/s = " << 1e-9 * flops / time_ms << std::endl;
+
+    }
   }
 
   if(verify) {
