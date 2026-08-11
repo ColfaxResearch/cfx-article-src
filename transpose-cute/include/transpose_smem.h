@@ -71,8 +71,8 @@ template <typename Element, bool isSwizzled = true> void transpose_smem(Transpos
   //
   auto tensor_shape = make_shape(params.M, params.N);
   auto tensor_shape_trans = make_shape(params.N, params.M);
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
   Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
   Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
 
@@ -91,8 +91,8 @@ template <typename Element, bool isSwizzled = true> void transpose_smem(Transpos
   Tensor tiled_tensor_D =
       tiled_divide(tensor_D, block_shape_trans); // ((bN, bM), n', m')
 
-  auto tileShapeS = make_layout(block_shape, LayoutRight{});
-  auto tileShapeD = make_layout(block_shape_trans, LayoutRight{});
+  auto tileShapeS = make_layout(block_shape, GenRowMajor{});
+  auto tileShapeD = make_layout(block_shape_trans, GenRowMajor{});
 
   auto smemLayoutS = tileShapeS;
   auto smemLayoutD = composition(smemLayoutS, tileShapeD);
@@ -100,9 +100,9 @@ template <typename Element, bool isSwizzled = true> void transpose_smem(Transpos
   auto smemLayoutD_swizzle = composition(smemLayoutS_swizzle, tileShapeD);
 
   auto threadLayoutS =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
   auto threadLayoutD =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
 
   size_t smem_size = int(
       sizeof(SharedStorageTranspose<Element, decltype(smemLayoutS_swizzle)>));

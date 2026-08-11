@@ -284,7 +284,7 @@ int copy_host_tma_load_and_store_kernel_multicast(int M, int N,
   // Make tensors
   //
 
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
   auto gmemLayoutD = make_ordered_layout(tensor_shape_out, Step<_1, _0, _2>{});
   //   print(gmemLayoutD);
 

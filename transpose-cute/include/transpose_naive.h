@@ -52,8 +52,8 @@ template <typename Element> void transpose_naive(TransposeParams<Element> params
   //
   auto tensor_shape = make_shape(params.M, params.N);
   auto tensor_shape_trans = make_shape(params.N, params.M);
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
+  auto gmemLayoutS = make_layout(tensor_shape, GenRowMajor{});
+  auto gmemLayoutD = make_layout(tensor_shape_trans, GenRowMajor{});
   Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
   Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
   
@@ -75,9 +75,9 @@ template <typename Element> void transpose_naive(TransposeParams<Element> params
   Tensor tiled_tensor_DT = tiled_divide(tensor_DT, block_shape); // ((bM, bN), m', n')
   
   auto threadLayoutS =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
   auto threadLayoutD =
-      make_layout(make_shape(Int<8>{}, Int<32>{}), LayoutRight{});
+      make_layout(make_shape(Int<8>{}, Int<32>{}), GenRowMajor{});
   
   dim3 gridDim(
       size<1>(tiled_tensor_S),
